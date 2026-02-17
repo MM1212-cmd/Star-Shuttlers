@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Star Shuttlers</title>
+
+<style>
+body {
+    font-family: Arial, sans-serif;
+    margin: 0;
+    background-color: #f4f6f9;
+}
+
+header {
+    background-color: #0a3d62;
+    color: white;
+    padding: 20px;
+    text-align: center;
+}
+
+nav {
+    display: flex;
+    background-color: #1e3799;
+}
+
+nav button {
+    flex: 1;
+    padding: 14px;
+    border: none;
+    background: none;
+    color: white;
+    cursor: pointer;
+    font-size: 16px;
+}
+
+nav button:hover {
+    background-color: #4a69bd;
+}
+
+.tab-content {
+    display: none;
+    padding: 30px;
+}
+
+.active {
+    display: block;
+}
+</style>
+
+<script>
+const scriptURL = "https://script.google.com/macros/s/AKfycbzmtioFvwzFOKRJU8rjZGqnVlQTsEIAwpBjTaNyFgtGtdzwnAmkmdvxP3Ni7x0ne-9U0Q/exec";
+const bookingLink = "YOUR_LIVE_SITE_LINK";
+const whatsappNumber = "614XXXXXXXX";
+const adminPassword = "staradmin";
+
+let courtSettings = {};
+let currentCounts = {};
+let waitlist = {};
+
+function adminLogin() {
+    const pass = prompt("Enter Admin Password");
+    if (pass === adminPassword) {
+        document.getElementById("adminPanel").style.display = "block";
+    } else {
+        alert("Wrong password ❌");
+    }
+}
+
+async function saveCourt(day) {
+    const courts = parseInt(document.getElementById(day+"Courts").value);
+
+    await fetch(scriptURL, {
+        method: "POST",
+        body: JSON.stringify({
+            type: "updateCourts",
+            day: day,
+            courts: courts
+        })
+    });
+
+    alert("Saved ✅");
+    loadData();
+}
+
+function getMax(day) {
+    return (courtSettings[day] || 1) * 4;
+}
+
+async function bookPlayer() {
+    const name = document.getElementById("name").value;
+    const day = document.getElementById("day").value;
+    const time = document.getElementById("time").value;
+
+    if (currentCounts[day] >= getMax(day)) {
+        if (!waitlist[day]) waitlist[day] = [];
+        waitlist[day].push({name, time});
+        alert("Session Full. Added to Waitlist 🟡");
+        return;
+    }
+
+    await fetch(scriptURL, {
+        method: "POST",
+        body: JSON.stringify({
+            type: "booking",
+            name,
+            day,
+            time,
+            status: "Booked"
+        })
+    });
+
+    loadData();
+}
+
+async function cancelPlayer() {
+    const name = document.getElementById("name").value;
+    const day = document.getElementById("day").value;
+    const time = document.getElementById("time").value;
+
+    await fetch(scriptURL, {
+        method: "POST",
+        body: JSON.stringify({
+            type: "booking",
+            name,
+            day,
+            time,
+            status: "Cancelled"
+        })
+    });
+
+    // Auto promote from waitlist
+    if (waitlist[day] && waitlist[day].length > 0) {
+        const promoted = waitlist[day].shift();
+
+        await fetch(scriptURL, {
+            method: "POST",
+            body: JSON.stringify({
+                type: "booking",
+                name: promoted.name,
+                day: day,
+                time: promoted.time,
+                status: "Booked"
+            })
+        });
+
+        const msg = `🎉 Spot Available!
+${promoted.name} promoted from waitlist for ${day}.
+
+Book here:
+${bookingLink}`;
+
+        window.open(`https://wa.me/${whatsappNumber}?text=${encodeURIComponent(msg)}`);
+    }
+
+    loadData();
+}
+
+async function loadData() {
+    const res = await fetch(scriptURL);
+    const data = await res.json();
+
+    let counts = {Tuesday:0, Friday:0, Saturday:0, Sunday:0};
+    let listHTML = "";
+
+    // Load Settings
+    for (let i=1;i<data.settings.length;i++) {
+        courtSettings[data.settings[i][0]] = data.settings[i][1];
+    }
+
+    // Load Bookings
+    for (let i=1;i<data.bookings.length;i++) {
+        const row = data.bookings[i];
+        const name = row[0];
+        const day = row[1];
+        const time = row[2];
+        const status = row[3];
+
+        if (status === "Booked") {
+            counts[day]++;
+            listHTML += `<li>${name} - ${day} (${time})</li>`;
+        }
+
+        if (status === "Cancelled") {
+            listHTML += `<li style="text-decoration:line-through;color:red">
+            ${name} - ${day} (${time})</li>`;
+        }
+    }
+
+    currentCounts = counts;
+
+    for (let day in counts) {
+        const full = counts[day] >= getMax(day);
+        document.getElementById(day+"Count").innerText =
+            counts[day] + " / " + getMax(day) + (full ? " 🔴 FULL" : "");
+    }
+
+    document.getElementById("playerList").innerHTML = listHTML;
+}
+
+window.onload = function() {
+    loadData();
+}
+</script>
+</head>
+
+<body onload="openTab('Home')">
+
+<header>
+    <h1>🏸 Star Shuttlers</h1>
+    <p>Community Badminton Group</p>
+</header>
+
+<nav>
+    <button onclick="openTab('Home')">Home</button>
+    <button onclick="openTab('Tuesday')">Tuesday</button>
+    <button onclick="openTab('Friday')">Friday</button>
+    <button onclick="openTab('Saturday')">Saturday</button>
+    <button onclick="openTab('Sunday')">Sunday</button>
+</nav>
+
+<div id="Home" class="tab-content">
+    <h2>Welcome to Star Shuttlers</h2>
+    <p>Join our friendly badminton sessions! We run games weekly and welcome players of all levels.</p>
+</div>
+
+<div id="Tuesday" class="tab-content">
+    <h2>Tuesday Games</h2>
+    <p>Time: 6:00 PM – 8:00 PM</p>
+    <p>Spots Available: 16–24 players</p>
+</div>
+
+<div id="Friday" class="tab-content">
+    <h2>Friday Games</h2>
+    <p>Time: 7:00 PM – 9:00 PM</p>
+    <p>Spots Available: 16–24 players</p>
+</div>
+
+<div id="Saturday" class="tab-content">
+    <h2>Saturday Games</h2>
+    <p>Time: 4:00 PM – 6:00 PM</p>
+    <p>Spots Available: 16–24 players</p>
+</div>
+
+<div id="Sunday" class="tab-content">
+    <h2>Sunday Games</h2>
+    <p>Time: 3:00 PM – 5:00 PM</p>
+    <p>Spots Available: 16–24 players</p>
+</div>
+
+</body>
+</html>
